@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strconv"
 	"time"
 )
 
@@ -54,26 +55,80 @@ type Order struct {
 	OrderType        OrderType  `json:"type"`                      // order type (see above)
 }
 
-func (self *Order) Buy() bool {
-	return self.OrderType == OrderTypeBuyMarket ||
-		self.OrderType == OrderTypeBuyLimit ||
-		self.OrderType == OrderTypeBuyIOC ||
-		self.OrderType == OrderTypeBuyLimitMaker ||
-		self.OrderType == OrderTypeBuyStopLimit ||
-		self.OrderType == OrderTypeBuyLimitFOK ||
-		self.OrderType == OrderTypeBuyStopLimitFOK
+func (order *Order) Buy() bool {
+	return order.OrderType == OrderTypeBuyMarket ||
+		order.OrderType == OrderTypeBuyLimit ||
+		order.OrderType == OrderTypeBuyIOC ||
+		order.OrderType == OrderTypeBuyLimitMaker ||
+		order.OrderType == OrderTypeBuyStopLimit ||
+		order.OrderType == OrderTypeBuyLimitFOK ||
+		order.OrderType == OrderTypeBuyStopLimitFOK
 }
 
-func (self *Order) Sell() bool {
-	return !self.Buy()
+func (order *Order) Sell() bool {
+	return !order.Buy()
 }
 
-func (self *Order) GetCreatedAt() time.Time {
-	if self.CreatedAt == 0 {
+func (order *Order) GetCreatedAt() time.Time {
+	if order.CreatedAt == 0 {
 		return time.Now().UTC()
 	} else {
-		return time.Unix((self.CreatedAt / 1000), 0)
+		return time.Unix((order.CreatedAt / 1000), 0)
 	}
+}
+
+func (client *Client) PlaceOrder(symbol string, orderType OrderType, amount, price float64, metadata string) ([]byte, error) {
+	var (
+		err     error
+		account *Account
+	)
+
+	if account, err = client.Account(AccountTypeSpot, AccountStateWorking); err != nil {
+		return nil, err
+	}
+
+	type (
+		Request struct {
+			AccountId     string `json:"account-id"`
+			Symbol        string `json:"symbol"`
+			OrderType     string `json:"type"`
+			Amount        string `json:"amount"`
+			Price         string `json:"price,omitempty"`
+			ClientOrderId string `json:"client-order-id,omitempty"`
+		}
+		Response struct {
+			Data string `json:"data"`
+		}
+	)
+
+	request := Request{
+		AccountId: strconv.FormatInt(account.Id, 10),
+		Symbol:    symbol,
+		OrderType: string(orderType),
+		Amount:    strconv.FormatFloat(amount, 'f', -1, 64),
+		Price: func() string {
+			if price > 0 {
+				return strconv.FormatFloat(price, 'f', -1, 64)
+			}
+			return ""
+		}(),
+		ClientOrderId: metadata,
+	}
+
+	var (
+		body []byte
+		resp Response
+	)
+
+	if body, err = client.post("/v1/order/orders/place", request); err != nil {
+		return nil, err
+	}
+
+	if err = json.Unmarshal(body, &resp); err != nil {
+		return nil, err
+	}
+
+	return []byte(resp.Data), nil
 }
 
 func (client *Client) OpenOrders(symbol string) ([]Order, error) {

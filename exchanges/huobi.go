@@ -158,7 +158,30 @@ func (self *Huobi) Order(
 	kind model.OrderType,
 	metadata string,
 ) (oid []byte, raw []byte, err error) {
-	return nil, nil, errors.New("Not implemented")
+	huobiClient, ok := client.(*exchange.Client)
+	if !ok {
+		return nil, nil, errors.New("invalid argument: client")
+	}
+
+	if oid, err = huobiClient.PlaceOrder(market, func() exchange.OrderType {
+		if side == model.BUY {
+			if kind == model.LIMIT {
+				return exchange.OrderTypeBuyLimit
+			} else {
+				return exchange.OrderTypeBuyMarket
+			}
+		} else {
+			if kind == model.LIMIT {
+				return exchange.OrderTypeSellLimit
+			} else {
+				return exchange.OrderTypeSellMarket
+			}
+		}
+	}(), size, price, metadata); err != nil {
+		return nil, nil, errors.Wrap(err, 1)
+	}
+
+	return oid, nil, nil
 }
 
 func (self *Huobi) StopLoss(client interface{}, market string, size float64, price float64, kind model.OrderType, metadata string) ([]byte, error) {

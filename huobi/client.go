@@ -57,17 +57,15 @@ func (client *Client) do(req *http.Request) ([]byte, error) {
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		if resp.StatusCode < 200 || resp.StatusCode >= 400 {
-			return nil, errors.New(resp.Status)
-		}
 		return nil, err
 	}
 
+	if err, msg := IsError(body); err {
+		return nil, errors.New(msg)
+	}
+
 	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
-		if err, msg := IsError(body); err {
-			return body, errors.New(msg)
-		}
-		return body, errors.New(resp.Status)
+		return nil, errors.New(resp.Status)
 	}
 
 	return body, nil
@@ -117,7 +115,7 @@ func (client *Client) get(path string, query url.Values, auth bool) ([]byte, err
 	return client.do(req)
 }
 
-func (client *Client) post(path string, params url.Values) ([]byte, error) {
+func (client *Client) post(path string, params interface{}) ([]byte, error) {
 	// respect the rate limit
 	err := BeforeRequest(http.MethodPost, path)
 	if err != nil {
